@@ -87,7 +87,7 @@ app.get("/messages", async (req, res) => {
 
         const dbMessages = client.db("messages");
         const messages = await dbMessages.collection("messages").find({ $or: [{ from: user }, { to: user }, {to: "Todos"} ] }).sort({ _id: -1 }).limit(limit? parseInt(limit) : 0).toArray();
-        
+
         res.send(messages);
         client.close();
     }
@@ -98,9 +98,23 @@ app.get("/messages", async (req, res) => {
     }
 });
 
-app.post("status", (req, res) => {
-    const { status } = req.body;
-    res.sendStatus(200);
+app.post("/status", async (req, res) => {
+    const { user } = req.headers;
+
+    try {
+        client.connect();
+
+        const dbPartipants = client.db("partipants");
+        await dbPartipants.collection("partipants").updateOne({ name: user }, { $set: { lastStatus: Date.now() } });
+
+        res.sendStatus(200);
+        client.close();
+    }
+    catch (error) {
+        console.log(error);
+        res.sendStatus(404);
+        client.close();
+    }
 });
 
 app.listen(5000, () => {

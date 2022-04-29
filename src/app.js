@@ -33,7 +33,8 @@ app.post("/participants", async (req, res) => {
 
         res.sendStatus(201);
         client.close();
-    } catch (error) {
+    } 
+    catch (error) {
         console.log(error);
         res.sendStatus(409);
         client.close();
@@ -49,20 +50,52 @@ app.get("/participants", async (req, res) => {
 
         res.send(partipants);
         client.close();
-    } catch (error) {
+    } 
+    catch (error) {
         console.log(error);
         res.sendStatus(409);
         client.close();
     }
 });
 
-app.post("/messages", (req, res) => {
-    const { message } = req.body;
-    res.sendStatus(200);
+app.post("/messages", async (req, res) => {
+    const { to, text, type } = req.body;
+    const { user:from } = req.headers;
+    
+    try {
+        client.connect();
+
+        const dbMessages = client.db("messages");
+        await dbMessages.collection("messages").insertOne({ from, to, text, type, time: dayjs().format("HH:mm:ss") });
+        
+        res.sendStatus(201);
+        client.close();
+    } 
+    catch (error) {
+        console.log(error);
+        res.sendStatus(409);
+        client.close();
+    }
 });
 
-app.get("/messages", (req, res) => {
-    res.sendStatus(200);
+app.get("/messages", async (req, res) => {
+    const { user } = req.headers;
+    const { limit } = req.query;
+    
+    try {
+        client.connect();
+
+        const dbMessages = client.db("messages");
+        const messages = await dbMessages.collection("messages").find({ $or: [{ from: user }, { to: user }, {to: "Todos"} ] }).sort({ _id: -1 }).limit(limit? parseInt(limit) : 0).toArray();
+        
+        res.send(messages);
+        client.close();
+    }
+    catch (error) {
+        console.log(error);
+        res.sendStatus(409);
+        client.close();
+    }
 });
 
 app.post("status", (req, res) => {

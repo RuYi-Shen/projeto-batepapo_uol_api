@@ -130,7 +130,7 @@ app.get("/messages", async (req, res) => {
             .limit(limit ? parseInt(limit) : 0)
             .toArray();
 
-        res.send(messages);
+        res.send(messages.reverse());
     } catch (err) {
         console.log(err);
         res.sendStatus(500);

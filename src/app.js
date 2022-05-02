@@ -24,11 +24,13 @@ client
     });
 
 const userSchema = Joi.object({
-    name: Joi.string().min(1).max(30).required(),
+    name: Joi.string().required(),
 });
 
-const nameSchema = Joi.object({
-    name: Joi.string().min(1).max(30).required(),
+const messageSchema = Joi.object({
+    to: Joi.string().required(),
+    text: Joi.string().required(),
+    type: Joi.string().valid("message", "private_message").required()
 });
 
 app.post("/participants", async (req, res) => {
@@ -85,6 +87,13 @@ app.post("/messages", async (req, res) => {
     const { user: from } = req.headers;
 
     try {
+        await messageSchema.validateAsync(req.body, { abortEarly: false });
+
+        const document = await db.collection("participants").findOne({ name: from });
+        if (!document) {
+            throw new Error("User not found");
+        };
+
         await db.collection("messages").insertOne({
             from,
             to,
@@ -96,7 +105,15 @@ app.post("/messages", async (req, res) => {
         res.sendStatus(201);
     } catch (err) {
         console.log(err);
-        res.sendStatus(409);
+        if (err.name === "ValidationError") {
+            res.status(422).send(err.details.map((detail) => detail.message));
+            return;
+        }
+        else if (err.message === "User not found") {
+            res.status(422).send(err.message);
+            return;
+        }
+        res.sendStatus(500);
     }
 });
 

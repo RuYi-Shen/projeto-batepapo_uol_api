@@ -187,6 +187,46 @@ app.delete("/messages/:id", async (req, res) => {
     }
 });
 
+app.put("/messages/:id", async (req, res) => {
+    const { id } = req.params;
+    const { user } = req.headers;
+    try {
+        await messageSchema.validateAsync(req.body, { abortEarly: false });
+
+        const message = await db
+            .collection("messages")
+            .findOne({ _id: new ObjectId(id) });
+        if (!message) {
+            throw new Error("Message not found");
+        }
+
+        if (message.from !== user) {
+            throw new Error("You are not allowed to edit this message");
+        }
+
+        await db
+            .collection("messages")
+            .updateOne({ _id: new ObjectId(id) }, { $set: req.body });
+
+        res.sendStatus(200);
+    } catch (err) {
+        console.log(err);
+        if (err.name === "ValidationError") {
+            res.status(422).send(err.details.map((detail) => detail.message));
+            return;
+        }
+        if (err.message === "Message not found") {
+            res.status(404).send(err.message);
+            return;
+        }
+        if (err.message === "You are not allowed to edit this message") {
+            res.status(401).send(err.message);
+            return;
+        }
+        res.sendStatus(500);
+    }
+});
+
 app.listen(5000, () => {
     console.log("Server is running on port 5000");
 });

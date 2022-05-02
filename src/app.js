@@ -1,9 +1,10 @@
+import { stripHtml } from "string-strip-html";
 import express, { json } from "express";
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
+import dayjs from "dayjs";
 import cors from "cors";
 import Joi from "joi";
-import dayjs from "dayjs";
 
 dotenv.config();
 
@@ -34,7 +35,8 @@ const messageSchema = Joi.object({
 });
 
 app.post("/participants", async (req, res) => {
-    const { name } = req.body;
+    const name = stripHtml(req.body.name).result.trim();
+
     try {
         await userSchema.validateAsync(req.body, { abortEarly: false });
 
@@ -54,7 +56,7 @@ app.post("/participants", async (req, res) => {
             time: dayjs().format("HH:mm:ss"),
         });
 
-        res.sendStatus(201);
+        res.status(201).send({ name });
     } catch (err) {
         console.log(err);
         if (err.name === "ValidationError") {

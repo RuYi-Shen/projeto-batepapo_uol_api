@@ -11,90 +11,110 @@ const app = express();
 app.use(json());
 app.use(cors());
 
+const db = null;
 const client = new MongoClient(process.env.DB_URL);
 
-const nameFormat = Joi.object({
-    name: Joi.string()
-        .min(1)
-        .max(30)
-        .required()
+client
+    .connect()
+    .then(() => {
+        db = client.db("uol_api");
+    })
+    .catch((err) => {
+        console.log(err);
+    });
+
+const userSchema = Joi.object({
+    name: Joi.string().min(1).max(30).required(),
+});
+
+const nameSchema = Joi.object({
+    name: Joi.string().min(1).max(30).required(),
 });
 
 app.post("/participants", async (req, res) => {
     const { name } = req.body;
-    try {
-        await client.connect();
 
-        const dbPartipants = client.db("partipants");
-        await dbPartipants.collection("partipants").insertOne({ name , lastStatus: Date.now() });
-        
-        const dbMessages = client.db("messages");
-        await dbMessages.collection("messages").insertOne({ from: name, to: "Todos", text: "entra na sala...", type: "status", time: dayjs().format("HH:mm:ss") });
+    try {
+        await userSchema.validateAsync(name, { abortEarly: false });
+
+        await db.findOne({ name }, (result) => {
+            if (result) {
+                throw new Error("User already exists");
+            }
+        });
+
+        await db
+            .collection("partipants")
+            .insertOne({ name, lastStatus: Date.now() });
+        await db.collection("messages").insertOne({
+            from: name,
+            to: "Todos",
+            text: "entra na sala...",
+            type: "status",
+            time: dayjs().format("HH:mm:ss"),
+        });
 
         res.sendStatus(201);
-        client.close();
-    } 
-    catch (error) {
-        console.log(error);
-        res.sendStatus(409);
-        client.close();
+    } catch (err) {
+        console.log(err);
+        if (err.name === "ValidationError") {
+            res.status(422).send(err.details.map((detail) => detail.message));
+            return;
+        } else if (err.message === "User already exists") {
+            res.status(409).send(err.message);
+            return;
+        }
+        res.sendStatus(500);
     }
 });
 
 app.get("/participants", async (req, res) => {
     try {
-        await client.connect();
-
-        const dbPartipants = client.db("partipants");
-        const partipants = await dbPartipants.collection("partipants").find().toArray();
+        const partipants = await db.collection("partipants").find().toArray();
 
         res.send(partipants);
-        client.close();
-    } 
-    catch (error) {
-        console.log(error);
-        res.sendStatus(409);
-        client.close();
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
     }
 });
 
 app.post("/messages", async (req, res) => {
     const { to, text, type } = req.body;
-    const { user:from } = req.headers;
-    
-    try {
-        client.connect();
+    const { user: from } = req.headers;
 
-        const dbMessages = client.db("messages");
-        await dbMessages.collection("messages").insertOne({ from, to, text, type, time: dayjs().format("HH:mm:ss") });
-        
+    try {
+        await db.collection("messages").insertOne({
+            from,
+            to,
+            text,
+            type,
+            time: dayjs().format("HH:mm:ss"),
+        });
+
         res.sendStatus(201);
-        client.close();
-    } 
-    catch (error) {
-        console.log(error);
+    } catch (err) {
+        console.log(err);
         res.sendStatus(409);
-        client.close();
     }
 });
 
 app.get("/messages", async (req, res) => {
     const { user } = req.headers;
     const { limit } = req.query;
-    
-    try {
-        client.connect();
 
-        const dbMessages = client.db("messages");
-        const messages = await dbMessages.collection("messages").find({ $or: [{ from: user }, { to: user }, {to: "Todos"} ] }).sort({ _id: -1 }).limit(limit? parseInt(limit) : 0).toArray();
+    try {
+        const messages = await db
+            .collection("messages")
+            .find({ $or: [{ from: user }, { to: user }, { to: "Todos" }] })
+            .sort({ _id: -1 })
+            .limit(limit ? parseInt(limit) : 0)
+            .toArray();
 
         res.send(messages);
-        client.close();
-    }
-    catch (error) {
-        console.log(error);
+    } catch (err) {
+        console.log(err);
         res.sendStatus(409);
-        client.close();
     }
 });
 
@@ -102,18 +122,14 @@ app.post("/status", async (req, res) => {
     const { user } = req.headers;
 
     try {
-        client.connect();
-
-        const dbPartipants = client.db("partipants");
-        await dbPartipants.collection("partipants").updateOne({ name: user }, { $set: { lastStatus: Date.now() } });
+        await db
+            .collection("partipants")
+            .updateOne({ name: user }, { $set: { lastStatus: Date.now() } });
 
         res.sendStatus(200);
-        client.close();
-    }
-    catch (error) {
-        console.log(error);
+    } catch (err) {
+        console.log(err);
         res.sendStatus(404);
-        client.close();
     }
 });
 

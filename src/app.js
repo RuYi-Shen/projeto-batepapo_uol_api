@@ -11,7 +11,7 @@ const app = express();
 app.use(json());
 app.use(cors());
 
-const db = null;
+let db = null;
 const client = new MongoClient(process.env.DB_URL);
 
 client
@@ -33,18 +33,16 @@ const nameSchema = Joi.object({
 
 app.post("/participants", async (req, res) => {
     const { name } = req.body;
-
     try {
-        await userSchema.validateAsync(name, { abortEarly: false });
+        await userSchema.validateAsync(req.body, { abortEarly: false });
 
-        await db.findOne({ name }, (result) => {
-            if (result) {
-                throw new Error("User already exists");
-            }
-        });
+        const document = await db.collection("participants").findOne({ name });
+        if (document) {
+            throw new Error("User already exists");
+        }
 
         await db
-            .collection("partipants")
+            .collection("participants")
             .insertOne({ name, lastStatus: Date.now() });
         await db.collection("messages").insertOne({
             from: name,
@@ -70,9 +68,12 @@ app.post("/participants", async (req, res) => {
 
 app.get("/participants", async (req, res) => {
     try {
-        const partipants = await db.collection("partipants").find().toArray();
+        const participants = await db
+            .collection("participants")
+            .find()
+            .toArray();
 
-        res.send(partipants);
+        res.send(participants);
     } catch (err) {
         console.log(err);
         res.sendStatus(500);
@@ -123,7 +124,7 @@ app.post("/status", async (req, res) => {
 
     try {
         await db
-            .collection("partipants")
+            .collection("participants")
             .updateOne({ name: user }, { $set: { lastStatus: Date.now() } });
 
         res.sendStatus(200);

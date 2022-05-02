@@ -30,7 +30,7 @@ const userSchema = Joi.object({
 const messageSchema = Joi.object({
     to: Joi.string().required(),
     text: Joi.string().required(),
-    type: Joi.string().valid("message", "private_message").required()
+    type: Joi.string().valid("message", "private_message").required(),
 });
 
 app.post("/participants", async (req, res) => {
@@ -89,10 +89,12 @@ app.post("/messages", async (req, res) => {
     try {
         await messageSchema.validateAsync(req.body, { abortEarly: false });
 
-        const document = await db.collection("participants").findOne({ name: from });
+        const document = await db
+            .collection("participants")
+            .findOne({ name: from });
         if (!document) {
             throw new Error("User not found");
-        };
+        }
 
         await db.collection("messages").insertOne({
             from,
@@ -108,8 +110,7 @@ app.post("/messages", async (req, res) => {
         if (err.name === "ValidationError") {
             res.status(422).send(err.details.map((detail) => detail.message));
             return;
-        }
-        else if (err.message === "User not found") {
+        } else if (err.message === "User not found") {
             res.status(422).send(err.message);
             return;
         }
@@ -132,7 +133,7 @@ app.get("/messages", async (req, res) => {
         res.send(messages);
     } catch (err) {
         console.log(err);
-        res.sendStatus(409);
+        res.sendStatus(500);
     }
 });
 
@@ -154,3 +155,25 @@ app.post("/status", async (req, res) => {
 app.listen(5000, () => {
     console.log("Server is running on port 5000");
 });
+
+async function removeParticipant(name) {
+    try {
+        await db.collection("participants").deleteOne({ name });
+    } catch (err) {
+        console.log(err);
+    }
+}
+
+const autoRemove = setInterval(async () => {
+    const now = Date.now();
+    try {
+        const participants = await db.collection("participants").find({}).toArray();
+        participants.forEach((participant) => {
+            if (participant.lastStatus + 1000 * 10 < now) {
+                removeParticipant(participant.name);
+            }
+        });
+    } catch (err) {
+        console.log(err);
+    }
+}, 15000);

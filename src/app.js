@@ -1,6 +1,6 @@
 import { stripHtml } from "string-strip-html";
 import express, { json } from "express";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import dayjs from "dayjs";
 import cors from "cors";
@@ -154,6 +154,39 @@ app.post("/status", async (req, res) => {
     }
 });
 
+app.delete("/messages/:id", async (req, res) => {
+    const { id } = req.params;
+    const { user } = req.headers;
+    try {
+        const message = await db
+            .collection("messages")
+            .findOne({ _id: new ObjectId(id) });
+        if (!message) {
+            throw new Error("Message not found");
+        }
+
+        if (message.from !== user) {
+            throw new Error("You are not allowed to delete this message");
+        }
+
+        await db.collection("messages").deleteOne({ _id: new ObjectId(id) });
+
+        res.sendStatus(200);
+    } catch (err) {
+        console.log(err);
+        if (err.message === "Message not found") {
+            res.status(404).send(err.message);
+            return;
+        } else if (
+            err.message === "You are not allowed to delete this message"
+        ) {
+            res.status(401).send(err.message);
+            return;
+        }
+        res.sendStatus(500);
+    }
+});
+
 app.listen(5000, () => {
     console.log("Server is running on port 5000");
 });
@@ -166,10 +199,13 @@ async function removeParticipant(name) {
     }
 }
 
-const autoRemove = setInterval(async () => {
+const autoRemoveInactiveUsers = setInterval(async () => {
     const now = Date.now();
     try {
-        const participants = await db.collection("participants").find({}).toArray();
+        const participants = await db
+            .collection("participants")
+            .find({})
+            .toArray();
         participants.forEach((participant) => {
             if (participant.lastStatus + 1000 * 10 < now) {
                 removeParticipant(participant.name);
